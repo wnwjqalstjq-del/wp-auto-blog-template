@@ -1,0 +1,65 @@
+name: WP Auto Blog Publisher
+
+on:
+  schedule:
+    # 월/수/금 08:00 KST (= UTC 23:00 전날)
+    - cron: '0 23 * * 0,2,4'
+  
+  # 수동 실행 (대시보드에서 트리거)
+  workflow_dispatch:
+    inputs:
+      force:
+        description: '강제 실행 (스케줄 무시)'
+        type: boolean
+        default: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    
+    steps:
+      - name: 코드 체크아웃
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Python 설치
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      
+      - name: 패키지 설치
+        run: pip install -r requirements.txt
+      
+      - name: 자동 발행 실행
+        working-directory: scripts
+        env:
+          # AI API 키 (최소 1개 필수)
+          GROK_API_KEY: ${{ secrets.GROK_API_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          CLAUDE_API_KEY: ${{ secrets.CLAUDE_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          # WordPress (필수)
+          WP_URL: ${{ secrets.WP_URL }}
+          WP_USER: ${{ secrets.WP_USER }}
+          WP_APP_PASSWORD: ${{ secrets.WP_APP_PASSWORD }}
+          # 이미지 API (권장)
+          UNSPLASH_KEY: ${{ secrets.UNSPLASH_KEY }}
+          PEXELS_KEY: ${{ secrets.PEXELS_KEY }}
+          # Supabase (대시보드 연동 시)
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+          TENANT_ID: ${{ secrets.TENANT_ID }}
+          # AI 우선순위 (선택)
+          AI_PRIORITY: ${{ secrets.AI_PRIORITY }}
+        run: python main.py
+      
+      - name: 해시 DB 커밋
+        run: |
+          git config user.name 'WP-AutoBot'
+          git config user.email 'autobot@planx.com'
+          git add data/published_hashes.json
+          git add data/keywords.csv || true
+          git diff --staged --quiet || git commit -m 'update: published hashes [skip ci]'
+          git push
